@@ -1,5 +1,5 @@
 // jobs/fasttrack-listener.js
-import { DB } from '../lib/db.js';
+import { DB, queryRetry } from '../lib/db.js';
 import { info, warn, debug } from '../lib/log.js';
 import { pgListen } from '../lib/pg_notify.js';
 
@@ -26,7 +26,7 @@ async function loadPoolContext(payload) {
                              : null;
   if (!by) return null;
 
-  const { rows } = await DB.query(`
+  const { rows } = await queryRetry(`
     SELECT
       p.pool_id, p.pair_contract, p.is_uzig_quote, p.created_at,
       p.base_token_id, b.denom AS base_denom, b.exponent AS base_exp,
@@ -41,7 +41,7 @@ async function loadPoolContext(payload) {
 }
 
 async function holdersCount(tokenId) {
-  const { rows } = await DB.query(
+  const { rows } = await queryRetry(
     `SELECT holders_count::BIGINT AS c
      FROM token_holders_stats
      WHERE token_id=$1`,
