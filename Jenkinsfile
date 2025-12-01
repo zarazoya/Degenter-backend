@@ -52,6 +52,7 @@ pipeline {
               set -e
               docker pull ${IMAGE_NAME}:latest
               cd ${DEPLOY_PATH}
+              docker compose down --remove-orphans || true
               docker compose up -d
             '
           """
