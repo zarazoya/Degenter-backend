@@ -5,6 +5,7 @@ import log from '../lib/log.js';
 const LOOP_SEC = parseInt(process.env.MATRIX_ROLLUP_SEC || '60', 10);
 const BUCKETS = [['30m',30], ['1h',60], ['4h',240], ['24h',1440]];
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+const MATRIX_STATEMENT_TIMEOUT_MS = parseInt(process.env.MATRIX_STMT_TIMEOUT_MS || `${180_000}`, 10); // bump for heavy rollups
 
 /**
  * UNIT RULES
@@ -15,6 +16,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
  */
 
 async function rollPoolVolumes(label, mins, onlyPoolId = null) {
+  await DB.query(`SET statement_timeout = '${MATRIX_STATEMENT_TIMEOUT_MS}ms'`);
   await DB.query(`
     WITH q AS (
       SELECT
@@ -94,6 +96,7 @@ async function rollPoolVolumes(label, mins, onlyPoolId = null) {
 }
 
 async function rollPoolTVL(label, onlyPoolId = null) {
+  await DB.query(`SET statement_timeout = '${MATRIX_STATEMENT_TIMEOUT_MS}ms'`);
   await DB.query(`
     /* DISPLAY prices for base/quote */
     WITH latest_price_disp AS (
@@ -161,6 +164,7 @@ async function rollPoolTVL(label, onlyPoolId = null) {
 }
 
 async function rollTokenMatrix(label, onlyTokenId = null) {
+  await DB.query(`SET statement_timeout = '${MATRIX_STATEMENT_TIMEOUT_MS}ms'`);
   await DB.query(`
     /* 1) Candidate price from PRICES (DISPLAY) */
     WITH px_from_prices AS (
