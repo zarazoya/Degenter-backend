@@ -19,6 +19,13 @@ function isIbcDenom(d) {
   return typeof d === 'string' && d.startsWith('ibc/');
 }
 
+async function getNativeClient() {
+  const runner = DB.createQueryRunner();
+  await runner.connect();
+  const client = await runner.connection.driver.obtainMasterConnection();
+  return { runner, client };
+}
+
 async function bumpStatsTimestampOnly(token_id) {
   await DB.query(`
     INSERT INTO token_holders_stats(token_id, holders_count, updated_at)
@@ -90,7 +97,7 @@ export async function refreshHoldersOnce(token_id, denom, maxPages = MAX_HOLDER_
       // empty & no more pages → done
     }
 
-    const client = await DB.connect();
+    const { runner, client } = await getNativeClient();
     try {
       await client.query('BEGIN');
 
@@ -119,7 +126,7 @@ export async function refreshHoldersOnce(token_id, denom, maxPages = MAX_HOLDER_
       await client.query('ROLLBACK');
       throw e;
     } finally {
-      client.release();
+      await runner.release();
     }
 
     nextKey = page?.pagination?.next_key || null;
@@ -128,7 +135,7 @@ export async function refreshHoldersOnce(token_id, denom, maxPages = MAX_HOLDER_
 
   // Final normalization & stats (single pass after the sweep)
   const all = Array.from(seen);
-  const client = await DB.connect();
+  const { runner, client } = await getNativeClient();
   try {
     await client.query('BEGIN');
 
@@ -170,7 +177,7 @@ export async function refreshHoldersOnce(token_id, denom, maxPages = MAX_HOLDER_
     await client.query('ROLLBACK');
     warn('[holders/once]', denom, e.message);
   } finally {
-    client.release();
+    await runner.release();
   }
 }
 
