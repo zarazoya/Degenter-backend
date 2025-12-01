@@ -22,7 +22,7 @@ function isIbcDenom(d) {
 async function getNativeClient() {
   const runner = DB.createQueryRunner();
   await runner.connect();
-  const client = await runner.connection.driver.obtainMasterConnection();
+  const client = runner.databaseConnection; // native pg client
   return { runner, client };
 }
 
