@@ -28,21 +28,21 @@ pipeline {
                                           usernameVariable: 'DH_USER',
                                           passwordVariable: 'DH_PASS')]) {
           sh """
-            export DHU="${DOCKER_USER:-$DH_USER}"
-            TOKEN=$(curl -s -X POST https://hub.docker.com/v2/users/login \\
+            export DHU="\\${DOCKER_USER:-\\$DH_USER}"
+            TOKEN=\\$(curl -s -X POST https://hub.docker.com/v2/users/login \\
               -H "Content-Type: application/json" \\
-              -d '{"username": "'$DHU'", "password": "'$DH_PASS'"}' | jq -r .token)
+              -d '{"username": "'\\${DHU}'", "password": "'\\${DH_PASS}'"}' | jq -r .token)
 
             # Check if repo exists
-            EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \\
-              -H "Authorization: JWT $TOKEN" \\
+            EXISTS=\\$(curl -s -o /dev/null -w "%{http_code}" \\
+              -H "Authorization: JWT \\$TOKEN" \\
               https://hub.docker.com/v2/repositories/${IMAGE_NAMESPACE}/${IMAGE_REPO}/)
 
-            if [ "$EXISTS" != "200" ]; then
+            if [ "\\$EXISTS" != "200" ]; then
               echo "Creating repo ${IMAGE_NAMESPACE}/${IMAGE_REPO}..."
               curl -s -X POST https://hub.docker.com/v2/repositories/ \\
                 -H "Content-Type: application/json" \\
-                -H "Authorization: JWT $TOKEN" \\
+                -H "Authorization: JWT \\$TOKEN" \\
                 -d '{"namespace": "'${IMAGE_NAMESPACE}'", "name": "'${IMAGE_REPO}'", "is_private": false}'
             else
               echo "Repo ${IMAGE_NAMESPACE}/${IMAGE_REPO} already exists."
