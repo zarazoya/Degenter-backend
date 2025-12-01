@@ -311,7 +311,12 @@ export function startFasttrackListener() {
 
       info('[fasttrack] done for pool', ctx.pool_id);
     } catch (e) {
-      warn('[fasttrack]', e.message);
+      const msg = String(e?.message || e || '');
+      if (msg.includes('Connection terminated unexpectedly')) {
+        debug('[fasttrack] transient DB disconnect, will continue after reconnect');
+      } else {
+        warn('[fasttrack]', msg);
+      }
     }
   });
 }
