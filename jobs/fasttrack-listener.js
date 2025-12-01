@@ -71,7 +71,7 @@ async function seedInitialFromFirstProvide(ctx) {
   // 1) try to read exponents from ctx; fallback to DB if missing.
   let baseExp = ctx.base_exp;
   if (baseExp == null) {
-    const { rows: rB } = await DB.query(
+    const { rows: rB } = await queryRetry(
       'SELECT exponent AS exp FROM tokens WHERE token_id = $1',
       [ctx.base_token_id],
     );
@@ -90,7 +90,7 @@ async function seedInitialFromFirstProvide(ctx) {
   const quoteExp = ctx.quote_exp != null ? ctx.quote_exp : 6;
 
   // 2) fetch the FIRST provide_liquidity trade for this pool
-  const { rows: trows } = await DB.query(
+  const { rows: trows } = await queryRetry(
     `
     SELECT
       reserve_asset1_denom,
