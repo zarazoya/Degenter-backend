@@ -18,7 +18,7 @@ pipeline {
       steps {
         git branch: 'main',
             credentialsId: env.GIT_CREDENTIALS,
-            url: 'https://github.com/zarazoya/Degenter-backend.git'
+            url: 'https://github.com/cryptocomicsdevs/degenter-indexer-postgresql.git'
       }
     }
 
