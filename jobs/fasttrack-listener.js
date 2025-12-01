@@ -57,6 +57,8 @@ function minuteFloor(d) {
   return t;
 }
 
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
 /**
  * Try to seed initial price + OHLCV from the FIRST provide_liquidity trade
  * for this pool. Falls back to LCD reserves if needed.
@@ -244,78 +246,86 @@ async function seedInitialFromLCD(ctx, baseExp) {
 export function startFasttrackListener() {
   // 1) listen for NOTIFY pair_created
   pgListen('pair_created', async (payload) => {
-    try {
-      const ctx = await loadPoolContext(payload);
-      if (!ctx) return warn('[fasttrack] no context for payload', payload);
-
-      info('[fasttrack] pair_created received', {
-        pool_id: ctx.pool_id,
-        pair: ctx.pair_contract,
-        base: ctx.base_denom,
-        quote: ctx.quote_denom
-      });
-
-      // 2) metadata (both legs, in parallel; errors tolerated)
-      await Promise.allSettled([
-        refreshMetaOnce(ctx.base_denom),
-        refreshMetaOnce(ctx.quote_denom),
-      ]);
-
-      // 3) holders for base token (and optionally quote if non-uzig)
-      await Promise.allSettled([
-        refreshHoldersOnce(ctx.base_token_id, ctx.base_denom),
-        (ctx.quote_denom !== 'uzig')
-          ? refreshHoldersOnce(ctx.quote_token_id, ctx.quote_denom)
-          : Promise.resolve(),
-      ]);
-
-      // log current counts
-      const baseHC = await holdersCount(ctx.base_token_id);
-      const quoteHC = (ctx.quote_denom !== 'uzig') ? await holdersCount(ctx.quote_token_id) : 0;
-      debug('[fasttrack] holders counts', { base: baseHC, quote: quoteHC });
-
-      // optional retry if zero
-      if (baseHC === 0) {
-        debug('[fasttrack] base holders 0, retrying once…', ctx.base_denom);
-        await refreshHoldersOnce(ctx.base_token_id, ctx.base_denom);
-      }
-      if (ctx.quote_denom !== 'uzig' && quoteHC === 0) {
-        debug('[fasttrack] quote holders 0, retrying once…', ctx.quote_denom);
-        await refreshHoldersOnce(ctx.quote_token_id, ctx.quote_denom);
-      }
-
-      // 4) security scan (base + maybe quote)
-      await Promise.allSettled([
-        scanTokenOnce(ctx.base_token_id, ctx.base_denom),
-        (ctx.quote_denom !== 'uzig')
-          ? scanTokenOnce(ctx.quote_token_id, ctx.quote_denom)
-          : Promise.resolve(),
-      ]);
-
-      // 5) matrix (pool + tokens) across all standard buckets
-      await Promise.allSettled([
-        refreshPoolMatrixOnce(ctx.pool_id),
-        refreshTokenMatrixOnce(ctx.base_token_id),
-        (ctx.quote_denom !== 'uzig')
-          ? refreshTokenMatrixOnce(ctx.quote_token_id)
-          : Promise.resolve(),
-      ]);
-
-      // 6) Initial price & OHLCV seed:
-      //    prefer first provide_liquidity trade reserves; fall back to LCD pool reserves if needed.
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+      attempts++;
       try {
-        await seedInitialFromFirstProvide(ctx);
-      } catch (e) {
-        warn('[fasttrack/init-from-provide]', e.message);
-      }
+        const ctx = await loadPoolContext(payload);
+        if (!ctx) return warn('[fasttrack] no context for payload', payload);
 
-      info('[fasttrack] done for pool', ctx.pool_id);
-    } catch (e) {
-      const msg = String(e?.message || e || '');
-      if (msg.includes('Connection terminated unexpectedly')) {
-        debug('[fasttrack] transient DB disconnect, will continue after reconnect');
-      } else {
+        info('[fasttrack] pair_created received', {
+          pool_id: ctx.pool_id,
+          pair: ctx.pair_contract,
+          base: ctx.base_denom,
+          quote: ctx.quote_denom
+        });
+
+        // 2) metadata (both legs, in parallel; errors tolerated)
+        await Promise.allSettled([
+          refreshMetaOnce(ctx.base_denom),
+          refreshMetaOnce(ctx.quote_denom),
+        ]);
+
+        // 3) holders for base token (and optionally quote if non-uzig)
+        await Promise.allSettled([
+          refreshHoldersOnce(ctx.base_token_id, ctx.base_denom),
+          (ctx.quote_denom !== 'uzig')
+            ? refreshHoldersOnce(ctx.quote_token_id, ctx.quote_denom)
+            : Promise.resolve(),
+        ]);
+
+        // log current counts
+        const baseHC = await holdersCount(ctx.base_token_id);
+        const quoteHC = (ctx.quote_denom !== 'uzig') ? await holdersCount(ctx.quote_token_id) : 0;
+        debug('[fasttrack] holders counts', { base: baseHC, quote: quoteHC });
+
+        // optional retry if zero
+        if (baseHC === 0) {
+          debug('[fasttrack] base holders 0, retrying once…', ctx.base_denom);
+          await refreshHoldersOnce(ctx.base_token_id, ctx.base_denom);
+        }
+        if (ctx.quote_denom !== 'uzig' && quoteHC === 0) {
+          debug('[fasttrack] quote holders 0, retrying once…', ctx.quote_denom);
+          await refreshHoldersOnce(ctx.quote_token_id, ctx.quote_denom);
+        }
+
+        // 4) security scan (base + maybe quote)
+        await Promise.allSettled([
+          scanTokenOnce(ctx.base_token_id, ctx.base_denom),
+          (ctx.quote_denom !== 'uzig')
+            ? scanTokenOnce(ctx.quote_token_id, ctx.quote_denom)
+            : Promise.resolve(),
+        ]);
+
+        // 5) matrix (pool + tokens) across all standard buckets
+        await Promise.allSettled([
+          refreshPoolMatrixOnce(ctx.pool_id),
+          refreshTokenMatrixOnce(ctx.base_token_id),
+          (ctx.quote_denom !== 'uzig')
+            ? refreshTokenMatrixOnce(ctx.quote_token_id)
+            : Promise.resolve(),
+        ]);
+
+        // 6) Initial price & OHLCV seed:
+        //    prefer first provide_liquidity trade reserves; fall back to LCD pool reserves if needed.
+        try {
+          await seedInitialFromFirstProvide(ctx);
+        } catch (e) {
+          warn('[fasttrack/init-from-provide]', e.message);
+        }
+
+        info('[fasttrack] done for pool', ctx.pool_id);
+        break; // success
+      } catch (e) {
+        const msg = String(e?.message || e || '');
+        if (msg.includes('Connection terminated unexpectedly') || msg.includes('ECONNRESET')) {
+          warn('[fasttrack] db connection dropped, retrying', { attempt: attempts, error: msg });
+          await sleep(1000 * attempts);
+          continue;
+        }
         warn('[fasttrack]', msg);
+        break;
       }
     }
   });
