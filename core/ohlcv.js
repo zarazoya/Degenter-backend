@@ -1,5 +1,5 @@
 // core/ohlcv.js
-import { DB } from '../lib/db.js';
+import { DB, queryRetry } from '../lib/db.js';
 import BatchQueue from '../lib/batch.js';
 
 /**
@@ -75,7 +75,7 @@ async function fetchPrevCloses(rows) {
      AND o.bucket_start = (k.bucket_start - INTERVAL '1 minute')
   `;
 
-  const { rows: prevs } = await DB.query(sql, params);
+  const { rows: prevs } = await queryRetry(sql, params);
   const out = new Map();
   for (const r of prevs) {
     const k = keyOf(r.pool_id, r.bucket_start);
@@ -141,7 +141,7 @@ const ohlcvQueue = new BatchQueue({
 
     // 4) single INSERT ... ON CONFLICT
     const { sql, args } = buildInsertSQL(rowsWithOpens);
-    await DB.query(sql, args);
+    await queryRetry(sql, args);
   }
 });
 

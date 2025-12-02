@@ -1,5 +1,5 @@
 // core/prices.js
-import { DB } from '../lib/db.js';
+import { DB, queryRetry } from '../lib/db.js';
 import { lcdSmart } from '../lib/lcd.js';
 import TTLCache from '../lib/cache.js';
 
@@ -10,7 +10,7 @@ const inflight = new Map(); // pair_contract -> Promise
 export async function upsertPrice(token_id, pool_id, price_in_zig, is_native) {
   console.log("the price being updated",price_in_zig);
   
-  await DB.query(`
+  await queryRetry(`
     INSERT INTO prices(token_id, pool_id, price_in_zig, is_pair_native, updated_at)
     VALUES ($1,$2,$3,$4, now())
     ON CONFLICT (token_id, pool_id) DO UPDATE
@@ -18,7 +18,7 @@ export async function upsertPrice(token_id, pool_id, price_in_zig, is_native) {
           updated_at   = now()
   `, [token_id, pool_id, price_in_zig, is_native]);
 
-  await DB.query(
+  await queryRetry(
     `INSERT INTO price_ticks(pool_id, token_id, price_in_zig)
      VALUES ($1,$2,$3)
      ON CONFLICT DO NOTHING`,
